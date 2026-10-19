@@ -4,7 +4,7 @@ import json
 import datetime
 
 st.set_page_config(page_title="我的AI聊天室", page_icon="🤖", layout="centered")
-st.title("🤖 我的专属 AI 聊天室 (v1.2.5)")
+st.title("🤖 我的专属 AI 聊天室 (v1.2.6)")
 
 # ==========================================
 # 🌟 状态初始化
@@ -21,10 +21,10 @@ if "api_key_input" not in st.session_state:
 if "last_uploaded_file" not in st.session_state:
     st.session_state.last_uploaded_file = ""
 
-if "uploaded_file_id" not in st.session_state:
-    st.session_state.uploaded_file_id = None
+# 用来记录文件指纹
+if "uploaded_file_fingerprint" not in st.session_state:
+    st.session_state.uploaded_file_fingerprint = None
 
-# 新增：用来控制页面顶部的成功提示
 if "show_success_banner" not in st.session_state:
     st.session_state.show_success_banner = False
 
@@ -63,15 +63,17 @@ with st.sidebar:
     uploaded_file = st.file_uploader("📤 导入聊天记录 (.json)", type=["json"])
 
     if uploaded_file is not None:
-        if st.session_state.uploaded_file_id != uploaded_file.id:
+        # 🌟 核心修复：用文件名和大小组合成一个字符串当指纹，绝对兼容云端
+        current_fingerprint = uploaded_file.name + str(uploaded_file.size)
+
+        # 只有当前文件的指纹，和上次导入的指纹不一样时，才执行
+        if st.session_state.uploaded_file_fingerprint != current_fingerprint:
             try:
                 imported_messages = json.load(uploaded_file)
                 if isinstance(imported_messages, list):
                     st.session_state.messages = imported_messages
                     st.session_state.last_uploaded_file = uploaded_file.name
-                    st.session_state.uploaded_file_id = uploaded_file.id
-
-                    # 开启成功提示开关
+                    st.session_state.uploaded_file_fingerprint = current_fingerprint  # 记住指纹
                     st.session_state.show_success_banner = True
                     st.rerun()
                 else:
@@ -85,29 +87,22 @@ with st.sidebar:
     if st.button("🧹 清空所有记录"):
         st.session_state.messages = []
         st.session_state.last_uploaded_file = ""
-        st.session_state.uploaded_file_id = None
+        st.session_state.uploaded_file_fingerprint = None
         st.session_state.show_success_banner = False
         st.rerun()
 
 # ==========================================
-# 🌟 主界面聊天区域
+# 主界面
 # ==========================================
-
-# 如果刚刚导入成功，页面顶部弹出绿色横幅，并保持到用户刷新
 if st.session_state.show_success_banner:
     st.success("✅ 历史聊天记录已成功载入！请往下划查看。")
-    # 顺便在屏幕右上角弹一个小提示框 (Streamlit 特有动画)
     st.toast('记录导入成功！', icon='🎉')
 
-# 渲染所有历史聊天记录
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-# 聊天输入框
 if user_input := st.chat_input("输入你想说的话..."):
-
-    # 如果有新消息，关掉顶部的成功横幅
     st.session_state.show_success_banner = False
 
     active_key = st.session_state.api_key_input
@@ -116,7 +111,7 @@ if user_input := st.chat_input("输入你想说的话..."):
         try:
             active_key = st.secrets["DEEPSEEK_API_KEY"]
         except Exception:
-            st.error("⚠️ 您未输入 API Key，且开发者未配置默认体验额度。")
+            st.error("⚠️ 您未输入 API Key。")
             st.stop()
 
     st.session_state.messages.append({"role": "user", "content": user_input})
