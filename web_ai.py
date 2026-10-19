@@ -1,92 +1,100 @@
 import streamlit as st
 from openai import OpenAI
+import json
+import datetime  # 新增：用来获取当前日期
 
-# 1. 网页基本设置
 st.set_page_config(page_title="我的AI聊天室", page_icon="🤖", layout="centered")
-st.title("🤖 我的专属 AI 聊天室 (v1.1)")
+st.title("🤖 我的专属 AI 聊天室 (v1.2.1)")
 
-# 2. 侧边栏：输入密钥和设置
 with st.sidebar:
     st.header("⚙️ 控制台")
+    user_api_key = st.text_input("请输入 API Key (不填则使用体验额度)", type="password")
+    model_name = st.selectbox("选择模型",
+                              ["deepseek-flash", "deepseek-chat", "deepseek-reasoner", "deepseek-v4.1-flash"])
+    system_prompt = st.text_area("AI 角色设定", value="你是一个聪明、幽默的新媒体助手。")
 
-    user_api_key = st.text_input(
-        "请输入 API Key (不填则使用免费体验额度)",
-        type="password"
-    )
+    st.divider()
+    st.subheader("💾 数据管理")
 
-    model_name = st.selectbox(
-        "选择模型",
-        [
-            "deepseek-flash",
-            "deepseek-chat",
-            "deepseek-reasoner",
-            "deepseek-v4.1-flash"
-        ]
-    )
-
-    # 人设设置（这一项现在可以随时改了）
-    system_prompt = st.text_area(
-        "AI 角色设定（System Prompt）",
-        value="你是一个聪明、幽默的新媒体助手，说话简洁清晰。"
-    )
-
-    # 只清空聊天记录，不动人设
-    if st.button("🧹 清空聊天记录"):
+    if "messages" not in st.session_state:
         st.session_state.messages = []
+
+    # ==========================================
+    # 🌟 V1.2.1 核心升级区
+    # ==========================================
+    if len(st.session_state.messages) > 0:
+        # 1. 自动生成带日期的文件名
+        today_str = datetime.datetime.now().strftime("%Y%m%d")
+        file_name = f"records_{today_str}.json"
+
+        # 2. 导出按钮
+        json_string = json.dumps(st.session_state.messages, ensure_ascii=False, indent=4)
+        st.download_button(
+            label="📥 导出当前聊天记录",
+            data=json_string,
+            file_name=file_name,
+            mime="application/json",
+            help="浏览器将默认保存到您的下载文件夹中"
+        )
+        st.caption(f"*(文件名将自动命名为: {file_name})*")
+
+    # 3. 导入功能
+    uploaded_file = st.file_uploader("📤 导入聊天记录 (.json)", type=["json"])
+    if uploaded_file is not None:
+        try:
+            imported_messages = json.load(uploaded_file)
+            if isinstance(imported_messages, list):
+                st.session_state.messages = imported_messages
+                # 记录一下刚才上传的文件名
+                st.session_state.last_uploaded_file = uploaded_file.name
+                st.success(f"记忆恢复成功！已读取：{uploaded_file.name}")
+                st.rerun()
+            else:
+                st.error("文件格式错误。")
+        except Exception as e:
+            st.error(f"导入失败：{e}")
+
+    # 如果之前上传过文件，显示一下提示
+    if "last_uploaded_file" in st.session_state:
+        st.caption(f"💡 上次导入的文件：`{st.session_state.last_uploaded_file}`")
+
+    if st.button("🧹 清空所有记录"):
+        st.session_state.messages = []
+        if "last_uploaded_file" in st.session_state:
+            del st.session_state.last_uploaded_file
         st.rerun()
 
-# 3. 初始化聊天记录（现在这里只存用户和AI的对话，不存 System Prompt 了）
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-
-# 4. 遍历并显示历史聊天记录
+# (下方的聊天逻辑和之前一模一样，无需修改)
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-# 5. 接收用户输入并处理
 if user_input := st.chat_input("输入你想说的话..."):
-
-    # 判断用谁的 Key
     if user_api_key:
         active_key = user_api_key
     else:
         try:
             active_key = st.secrets["DEEPSEEK_API_KEY"]
         except Exception:
-            st.error("⚠️ 您未输入 API Key，且开发者未配置默认体验额度。")
+            st.error("⚠️ 未配置默认体验额度。")
             st.stop()
 
-            # 把用户的话显示出来并加到历史记录
     st.session_state.messages.append({"role": "user", "content": user_input})
     with st.chat_message("user"):
         st.markdown(user_input)
 
-    # 调用 AI 生成回复
     with st.chat_message("assistant"):
         with st.spinner("AI 正在思考中..."):
             try:
-                client = OpenAI(
-                    api_key=active_key,
-                    base_url="https://api.deepseek.com"
-                )
-
-                # 🌟 核心进化点 1：动态拼装发送给 AI 的列表
-                # 每次发送时，把最新的左侧人设放在第一位，然后跟上最近 10 句聊天记录
+                client = OpenAI(api_key=active_key, base_url="https://api.deepseek.com")
                 send_messages = [{"role": "system", "content": system_prompt}] + st.session_state.messages[-10:]
 
-                # 发送请求
                 response = client.chat.completions.create(
-                    model=model_name,
-                    messages=send_messages,
-                    max_tokens=1000
+                    model=model_name, messages=send_messages, max_tokens=1000
                 )
 
                 ai_reply = response.choices[0].message.content
                 st.markdown(ai_reply)
-
-                # 把 AI 的回复加到本地的历史记录里
                 st.session_state.messages.append({"role": "assistant", "content": ai_reply})
-
             except Exception as e:
                 st.error(f"发生错误：{e}")
