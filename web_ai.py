@@ -4,15 +4,14 @@ import json
 import datetime
 
 st.set_page_config(page_title="我的AI聊天室", page_icon="🤖", layout="centered")
-st.title("🤖 我的专属 AI 聊天室 (v1.2.3)")
+st.title("🤖 我的专属 AI 聊天室 (v1.2.5)")
 
 # ==========================================
-# 🌟 状态初始化（保证刷新不掉设定）
+# 🌟 状态初始化
 # ==========================================
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# 原汁原味的设定，一个字都没少！
 if "system_prompt_input" not in st.session_state:
     st.session_state.system_prompt_input = "你是一个聪明、幽默的新媒体助手，说话简洁清晰。"
 
@@ -21,6 +20,13 @@ if "api_key_input" not in st.session_state:
 
 if "last_uploaded_file" not in st.session_state:
     st.session_state.last_uploaded_file = ""
+
+if "uploaded_file_id" not in st.session_state:
+    st.session_state.uploaded_file_id = None
+
+# 新增：用来控制页面顶部的成功提示
+if "show_success_banner" not in st.session_state:
+    st.session_state.show_success_banner = False
 
 # ==========================================
 # 侧边栏
@@ -35,15 +41,12 @@ with st.sidebar:
         ["deepseek-flash", "deepseek-chat", "deepseek-reasoner", "deepseek-v4.1-flash"]
     )
 
-    # 这里绑定了 key，你在里面敲任何字，刷新都不会丢
     st.text_area("AI 角色设定（System Prompt）", key="system_prompt_input")
 
     st.divider()
     st.subheader("💾 数据管理")
 
-    # ==========================================
-    # 🌟 导出功能（永远显示，不再隐藏）
-    # ==========================================
+    # 导出功能
     today_str = datetime.datetime.now().strftime("%Y%m%d")
     file_name = f"records_{today_str}.json"
     json_string = json.dumps(st.session_state.messages, ensure_ascii=False, indent=4)
@@ -53,26 +56,28 @@ with st.sidebar:
         data=json_string,
         file_name=file_name,
         mime="application/json",
-        help="浏览器将默认保存到您的下载文件夹中"
     )
     st.caption(f"*(文件名: {file_name})*")
 
-    # ==========================================
     # 导入功能
-    # ==========================================
     uploaded_file = st.file_uploader("📤 导入聊天记录 (.json)", type=["json"])
+
     if uploaded_file is not None:
-        try:
-            imported_messages = json.load(uploaded_file)
-            if isinstance(imported_messages, list):
-                st.session_state.messages = imported_messages
-                st.session_state.last_uploaded_file = uploaded_file.name
-                st.success(f"记忆恢复成功！已读取：{uploaded_file.name}")
-                st.rerun()
-            else:
-                st.error("文件格式错误。")
-        except Exception as e:
-            st.error(f"导入失败：{e}")
+        if st.session_state.uploaded_file_id != uploaded_file.id:
+            try:
+                imported_messages = json.load(uploaded_file)
+                if isinstance(imported_messages, list):
+                    st.session_state.messages = imported_messages
+                    st.session_state.last_uploaded_file = uploaded_file.name
+                    st.session_state.uploaded_file_id = uploaded_file.id
+
+                    # 开启成功提示开关
+                    st.session_state.show_success_banner = True
+                    st.rerun()
+                else:
+                    st.error("文件格式错误。")
+            except Exception as e:
+                st.error(f"导入失败：{e}")
 
     if st.session_state.last_uploaded_file:
         st.caption(f"💡 上次导入的文件：`{st.session_state.last_uploaded_file}`")
@@ -80,16 +85,30 @@ with st.sidebar:
     if st.button("🧹 清空所有记录"):
         st.session_state.messages = []
         st.session_state.last_uploaded_file = ""
+        st.session_state.uploaded_file_id = None
+        st.session_state.show_success_banner = False
         st.rerun()
 
 # ==========================================
-# 主界面聊天区域
+# 🌟 主界面聊天区域
 # ==========================================
+
+# 如果刚刚导入成功，页面顶部弹出绿色横幅，并保持到用户刷新
+if st.session_state.show_success_banner:
+    st.success("✅ 历史聊天记录已成功载入！请往下划查看。")
+    # 顺便在屏幕右上角弹一个小提示框 (Streamlit 特有动画)
+    st.toast('记录导入成功！', icon='🎉')
+
+# 渲染所有历史聊天记录
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
+# 聊天输入框
 if user_input := st.chat_input("输入你想说的话..."):
+
+    # 如果有新消息，关掉顶部的成功横幅
+    st.session_state.show_success_banner = False
 
     active_key = st.session_state.api_key_input
 
@@ -121,9 +140,6 @@ if user_input := st.chat_input("输入你想说的话..."):
                 ai_reply = response.choices[0].message.content
                 st.markdown(ai_reply)
                 st.session_state.messages.append({"role": "assistant", "content": ai_reply})
-
-                # 强制刷新一次页面，确保左侧的导出按钮立刻捕捉到新记录
-                st.rerun()
 
             except Exception as e:
                 st.error(f"发生错误：{e}")
