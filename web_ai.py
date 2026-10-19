@@ -4,7 +4,7 @@ import json
 import datetime
 
 st.set_page_config(page_title="我的AI聊天室", page_icon="🤖", layout="centered")
-st.title("🤖 我的专属 AI 聊天室 (v1.2.7)")
+st.title("🤖 我的专属 AI 聊天室 (v1.2.9)")
 
 # ==========================================
 # 🌟 状态初始化
@@ -41,14 +41,23 @@ with st.sidebar:
     # 导出功能
     today_str = datetime.datetime.now().strftime("%Y%m%d")
     file_name = f"records_{today_str}.json"
+
+    # 每次重新生成字符串
     json_string = json.dumps(st.session_state.messages, ensure_ascii=False, indent=4)
-    st.download_button(
-        label="📥 导出当前聊天记录",
-        data=json_string,
-        file_name=file_name,
-        mime="application/json",
-    )
-    st.caption(f"*(文件名: {file_name})*")
+
+    if len(st.session_state.messages) > 0:
+        st.download_button(
+            label=f"📥 导出记录 ({len(st.session_state.messages)}条)",
+            data=json_string,
+            file_name=file_name,
+            mime="application/json",
+        )
+        # 🌟 透明化展示：把要下载的内容直接印在屏幕上，你一眼就能看出是不是空的
+        with st.expander("🔍 预览要导出的文件内容 (点击展开)"):
+            st.code(json_string, language="json")
+    else:
+        st.button("📥 当前无记录可导出", disabled=True)
+        st.warning("⚠️ 内存中没有聊天记录，请先聊天再导出！")
 
     # 导入功能
     uploaded_file = st.file_uploader("📤 导入聊天记录 (.json)", type=["json"])
@@ -57,14 +66,14 @@ with st.sidebar:
         try:
             imported_messages = json.load(uploaded_file)
             if isinstance(imported_messages, list):
-                # 发现文件内容，显示提示
-                st.info(f"📦 发现文件内共有 {len(imported_messages)} 条记录")
-
-                # 🌟 核心改变：增加一个手动确认按钮
-                if st.button("🔥 确认覆盖并恢复记录"):
-                    st.session_state.messages = imported_messages
-                    st.session_state.show_success_banner = True
-                    st.rerun()
+                if len(imported_messages) == 0:
+                    st.error("❌ 导入失败：这个文件是空的（0 条记录）。")
+                else:
+                    st.info(f"📦 发现文件内共有 {len(imported_messages)} 条记录。")
+                    if st.button("🔥 确认覆盖并恢复记录"):
+                        st.session_state.messages = imported_messages
+                        st.session_state.show_success_banner = True
+                        st.rerun()  # 强制刷新，让界面立刻渲染
             else:
                 st.error("文件格式错误，不是列表。")
         except Exception as e:
@@ -82,7 +91,6 @@ if st.session_state.show_success_banner:
     st.success("✅ 历史聊天记录已成功载入！")
     st.toast('记录导入成功！', icon='🎉')
 
-# 🌟 这里加了一行测试代码：显示当前内存里的记录条数
 st.caption(f"当前页面聊天记录总数：{len(st.session_state.messages)} 条")
 
 for msg in st.session_state.messages:
@@ -123,6 +131,9 @@ if user_input := st.chat_input("输入你想说的话..."):
                 ai_reply = response.choices[0].message.content
                 st.markdown(ai_reply)
                 st.session_state.messages.append({"role": "assistant", "content": ai_reply})
+
+                # 🌟 核心修复点！强制 Rerun 一次，强制侧边栏用最新的数据重新渲染！
+                st.rerun()
 
             except Exception as e:
                 st.error(f"发生错误：{e}")
