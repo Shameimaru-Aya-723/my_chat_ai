@@ -1,0 +1,48 @@
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# ---------- 虚拟环境 ----------
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# ---------- 测试 / 工具缓存 ----------
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# ---------- 日志 ----------
+*.log
+logs/
+
+# ---------- 密钥与本地配置（切勿提交） ----------
+.env
+.env.*
+.streamlit/secrets.toml
+*.pem
+*.key
+
+# ---------- IDE ----------
+# 说明：.idea/ 已通过 git rm -r --cached 脱离版本控制，
+# 此处整体忽略，避免 PyCharm 本地配置再次混入提交。
+.idea/
+.vscode/
+
+# ---------- 操作系统 ----------
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
